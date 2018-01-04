@@ -266,8 +266,9 @@ def extract(root, base_uri=None):
     return licenses
 
 
-def save(licenses, dir=os.curdir):
-    os.makedirs(dir, exist_ok=True)
+def save(licenses, base_uri, dir=os.curdir):
+    schema_dir = os.path.join(dir, 'schema')
+    os.makedirs(schema_dir, exist_ok=True)
     if sys.version_info >= (3, 5):
         paths = glob.glob(os.path.join(dir, '**', '*.json'), recursive=True)
     else:
@@ -277,16 +278,57 @@ def save(licenses, dir=os.curdir):
         )
     for path in paths:
         os.remove(path)
+    license_schema = {
+        '@context': {
+            'schema': 'https://schema.org/',
+            'id': {
+                '@id': 'schema:identifier'
+            },
+            'name': {
+                '@id': 'schema:name',
+            },
+            'uris': {
+                '@id': 'schema:url',
+                '@container': '@list',
+            },
+            'tags': {
+                '@id': 'schema:keywords',
+            },
+            'identifiers': {
+                '@id': 'schema:identifier',
+            },
+        },
+    }
+    with open(os.path.join(schema_dir, 'license.jsonld'), 'w') as f:
+        json.dump(obj=license_schema, fp=f, indent=2)
+        f.write('\n')
+    license_schema_uri = urllib.parse.urljoin(
+        base=base_uri, url='schema/license.jsonld')
+    licenses_schema = {
+        '@context': {
+            '@vocab': license_schema_uri,
+        },
+    }
+    with open(os.path.join(schema_dir, 'licenses.jsonld'), 'w') as f:
+        json.dump(obj=licenses_schema, fp=f, indent=2)
+        f.write('\n')
     index = sorted(licenses.keys())
     with open(os.path.join(dir, 'licenses.json'), 'w') as f:
         json.dump(obj=index, fp=f, indent=2)
         f.write('\n')
-    full_index = {}
+    licenses_schema_uri = urllib.parse.urljoin(
+        base=base_uri, url='schema/licenses.jsonld')
+    full_index = {
+        '@context': licenses_schema_uri,
+        'licenses': {},
+    }
     for id, license in licenses.items():
         license = license.copy()
         if 'tags' in license:
             license['tags'] = sorted(license['tags'])
-        full_index[id] = license.copy()
+        full_index['licenses'][id] = license.copy()
+        license['@context'] = urllib.parse.urljoin(
+            base=base_uri, url='schema/license.jsonld')
         license['id'] = id
         license_path = os.path.join(dir, '{}.json'.format(id))
         with open(license_path, 'w') as f:
@@ -317,4 +359,4 @@ if __name__ == '__main__':
     if unused_identifiers:
         raise ValueError('unused IDENTIFIERS keys: {}'.format(
             ', '.join(sorted(unused_identifiers))))
-    save(licenses=licenses, dir=dir)
+    save(licenses=licenses, base_uri='https://wking.github.io/fsf-api/', dir=dir)
